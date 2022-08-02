@@ -40,7 +40,7 @@ def _post(url, data):
         data=data,
         headers=headers
     )
-    _log('-->' + res.text)
+    _log(f'-->{res.text}')
     _log(res.status_code)
     return res.text, res.status_code
 
@@ -66,7 +66,7 @@ def skipper(request):
     # If he has a token in his session use that:
     if "token" in request.session:
         token = request.session["token"]
-    
+
     # Try to reauth the user if there isn't a token:
     else:
         if "pocket_code" not in request.session:
@@ -83,53 +83,56 @@ def skipper(request):
             parsed_res = urllib.parse.parse_qs(response)
             token = parsed_res["access_token"][0]
             username = parsed_res["username"][0]
-            
+
             request.session["token"] = token
 
         except:
             # Finally fail and ask him to auth:
             return shortcuts.redirect("/pocket")
-    
+
     # Get the item list:
     data = {
         "access_token": token,
         "consumer_key": POCKET_OAUTH_CONSUMER_KEY
     }
     response, status_code = _post(POCKET_OAUTH_GET_ALL_URL, data)
-    
+
     # If the status isn't 200, we need to invalidate the cookie and re-auth the user:
     if status_code != 200:
         del request.session["token"]
         request.session.modified = True
         return shortcuts.redirect("/pocket")
-        
+
     reading_list_data = json.loads(response)
     reading_list = reading_list_data["list"]
     if reading_list == []:
         reading_list = {}
-    
+
     items = list(reading_list.values())
 
     # Sort by date:
     items.sort(key=lambda x: x["time_added"])
     items.reverse()
-    
+
     # Make sure the item has a name, or just show the url if not:
     for item in items:
         item["fool_proof_title"] = item.get("resolved_title", False) or \
                                    item.get("given_title", False) or \
                                    item.get("resolved_url", False) or \
                                    item.get("given_url", "Error: Title or URL was not given")
-    
+
     # Find favicons for each url:
     for item in items:
         try:
             parsed_url = urllib.parse.urlparse(item["resolved_url"])
-            item["favicon_url"] = parsed_url.scheme + r"://" + parsed_url.hostname + "/favicon.ico"
+            item[
+                "favicon_url"
+            ] = f"{parsed_url.scheme}://{parsed_url.hostname}/favicon.ico"
+
 
         except:
             pass
-    
+
     t = loader.get_template("list.html")
     return HttpResponse(t.render({"items": items}))
 
